@@ -1,28 +1,9 @@
-export type Destination = {
-  id: string
-  name: string
-  description: string
-}
+import { postPersonaAnalysis } from './api'
+import type { 
+  // Destination, ItineraryDay, ItineraryItem, 
+  Persona } from '../types/persona'
 
-export type ItineraryItem = {
-  id: string
-  title: string
-  description: string
-}
-
-export type ItineraryDay = {
-  day: number
-  title: string
-  items: ItineraryItem[]
-}
-
-export type Persona = {
-  keyword: string
-  tags: string[]
-  description: string
-  destinations: Destination[]
-  itinerary: ItineraryDay[]
-}
+export type { Destination, ItineraryDay, ItineraryItem, Persona } from '../types/persona'
 
 function makeItemId(prefix: string, idx: number) {
   return `${prefix}_${idx}`
@@ -198,27 +179,10 @@ function analyzePersonaLocal(answers: number[]): Persona {
   }
 }
 
-async function analyzePersonaViaApi(answers: number[]): Promise<Persona> {
-  const apiUrl = import.meta.env.VITE_PERSONA_API_URL as string | undefined
-  if (!apiUrl) {
-    return analyzePersonaLocal(answers)
-  }
-
-  const res = await fetch(apiUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ answers }),
-  })
-
-  if (!res.ok) {
-    return analyzePersonaLocal(answers)
-  }
-
-  const data = (await res.json()) as Persona
-  return data
-}
-
 export async function analyzePersonaAsync(answers: number[]): Promise<Persona> {
-  const result = await analyzePersonaViaApi(answers)
-  return result
+  try {
+    return await postPersonaAnalysis(answers)
+  } catch {
+    return analyzePersonaLocal(answers)
+  }
 }

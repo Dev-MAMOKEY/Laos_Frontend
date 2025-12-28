@@ -5,8 +5,7 @@ import PageShell from '../components/layout/PageShell'
 import Card from '../components/ui/Card'
 import ToggleTabs from '../components/ui/ToggleTabs'
 import { setAuthed } from '../storage/authStorage'
-import { getUsers, setUsers } from '../storage/usersStorage'
-import type { StoredUser } from '../storage/usersStorage'
+import { postLogin, postRegister } from '../services/api'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -20,11 +19,8 @@ export default function LoginPage() {
   const [signupPassword, setSignupPassword] = useState('')
   const [signupPasswordConfirm, setSignupPasswordConfirm] = useState('')
 
-  const [usernameCheck,
-    setUsernameCheck,
-  ] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle')
-
   const [formError, setFormError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const completeAuthAndGo = (email: string, username?: string) => {
     setAuthed({ email, username })
@@ -35,23 +31,6 @@ export default function LoginPage() {
     navigate(`/auth/${provider}`)
   }
 
-  const onCheckUsername = () => {
-    setFormError(null)
-
-    const username = signupUsername.trim()
-    if (username.length < 3) {
-      setUsernameCheck('invalid')
-      return
-    }
-
-    setUsernameCheck('checking')
-    window.setTimeout(() => {
-      const users = getUsers()
-      const exists = users.some((u) => u.username.toLowerCase() === username.toLowerCase())
-      setUsernameCheck(exists ? 'taken' : 'available')
-    }, 300)
-  }
-
   const onSubmitLogin = (e: FormEvent) => {
     e.preventDefault()
     setFormError(null)
@@ -59,15 +38,22 @@ export default function LoginPage() {
     const email = loginEmail.trim()
     const password = loginPassword
 
-    const users = getUsers()
-    const found = users.find((u) => u.email.toLowerCase() === email.toLowerCase())
-
-    if (found && found.password !== password) {
-      setFormError('비밀번호가 올바르지 않습니다.')
-      return
-    }
-
-    completeAuthAndGo(email, found?.username)
+    // 백엔드 로그인 호출 (서버 없으면 에러 메시지 표출)
+    setIsSubmitting(true)
+    postLogin({ user_id: email, password })
+      .then((res) => {
+        const username = res.username ?? email.split('@')[0]
+        const token = res.token
+        completeAuthAndGo(email, username)
+        if (token) {
+          // setAuthed already stores token when provided
+          setAuthed({ email, username }, token)
+        }
+      })
+      .catch((e) => {
+        setFormError(e instanceof Error ? e.message : '로그인에 실패했습니다.')
+      })
+      .finally(() => setIsSubmitting(false))
   }
 
   const onSubmitSignup = (e: FormEvent) => {
@@ -76,11 +62,6 @@ export default function LoginPage() {
 
     const email = signupEmail.trim()
     const username = signupUsername.trim()
-
-    if (usernameCheck !== 'available') {
-      setFormError('아이디 중복확인을 먼저 완료해주세요.')
-      return
-    }
 
     if (signupPassword.length < 6) {
       setFormError('비밀번호는 6자 이상으로 입력해주세요.')
@@ -92,47 +73,25 @@ export default function LoginPage() {
       return
     }
 
-    const users = getUsers()
-    const emailExists = users.some((u) => u.email.toLowerCase() === email.toLowerCase())
-    const usernameExists = users.some((u) => u.username.toLowerCase() === username.toLowerCase())
-
-    if (emailExists) {
-      setFormError('이미 가입된 이메일입니다.')
-      return
-    }
-    if (usernameExists) {
-      setFormError('이미 사용 중인 아이디입니다.')
-      setUsernameCheck('taken')
-      return
-    }
-
-    const nextUsers: StoredUser[] = [...users, { email, username, password: signupPassword }]
-    setUsers(nextUsers)
-
-    completeAuthAndGo(email, username)
+    // 백엔드 회원가입 호출 (서버 없으면 에러 메시지 표출)
+    setIsSubmitting(true)
+    postRegister({
+      user_id: username,
+      username,
+      password: signupPassword,
+      email,
+      'email-code': '000000',
+    })
+      .then((res) => {
+        const token = res.token
+        if (token) setAuthed({ email, username }, token)
+        completeAuthAndGo(email, username)
+      })
+      .catch((e) => {
+        setFormError(e instanceof Error ? e.message : '회원가입에 실패했습니다.')
+      })
+      .finally(() => setIsSubmitting(false))
   }
-
-  const usernameHelpText = (() => {
-    switch (usernameCheck) {
-      case 'invalid':
-        return '아이디는 3자 이상이어야 합니다.'
-      case 'checking':
-        return '확인 중...'
-      case 'available':
-        return '사용 가능한 아이디입니다.'
-      case 'taken':
-        return '이미 사용 중인 아이디입니다.'
-      default:
-        return null
-    }
-  })()
-
-  const usernameHelpTone =
-    usernameCheck === 'available'
-      ? 'text-green-700'
-      : usernameCheck === 'taken' || usernameCheck === 'invalid'
-        ? 'text-red-600'
-        : 'text-slate-500'
 
   return (
     <PageShell outerClassName="py-10">
@@ -193,9 +152,10 @@ export default function LoginPage() {
 
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   className="w-full rounded-2xl bg-blue-600 px-4 py-3 font-semibold text-white shadow-lg transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
-                  로그인
+                  {isSubmitting ? '로그인 중...' : '로그인'}
                 </button>
 
                 <p className="text-xs text-slate-500">
@@ -229,25 +189,11 @@ export default function LoginPage() {
                       type="text"
                       required
                       value={signupUsername}
-                      onChange={(e) => {
-                        setSignupUsername(e.target.value)
-                        setUsernameCheck('idle')
-                      }}
+                      onChange={(e) => setSignupUsername(e.target.value)}
                       className="w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-blue-500"
                       placeholder="아이디를 입력하세요"
                     />
-                    <button
-                      type="button"
-                      onClick={onCheckUsername}
-                      className="whitespace-nowrap rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-blue-50"
-                      disabled={usernameCheck === 'checking'}
-                    >
-                      중복확인
-                    </button>
                   </div>
-                  {usernameHelpText && (
-                    <p className={`mt-2 text-xs ${usernameHelpTone}`}>{usernameHelpText}</p>
-                  )}
                 </div>
 
                 <div>
@@ -285,9 +231,10 @@ export default function LoginPage() {
 
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   className="w-full rounded-2xl bg-blue-600 px-4 py-3 font-semibold text-white shadow-lg transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
-                  회원가입 완료 후 테스트 시작
+                  {isSubmitting ? '회원가입 중...' : '회원가입 완료 후 테스트 시작'}
                 </button>
 
                 <p className="text-xs text-slate-500">

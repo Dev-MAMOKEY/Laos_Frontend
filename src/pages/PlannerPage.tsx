@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { QUESTIONS } from '../questions'
 import { analyzePersonaAsync } from '../services/personaService'
+import { createHistoryEntry } from '../services/api'
 import PageShell from '../components/layout/PageShell'
 import ProgressBar from '../components/ui/ProgressBar'
 import Spinner from '../components/ui/Spinner'
-import { prependHistory } from '../storage/historyStorage'
 import { setAnswers, setPersona } from '../storage/personaStorage'
 
 type Message = {
@@ -70,7 +70,10 @@ export default function PlannerPage() {
         .then((persona) => {
           setPersona(persona)
           setAnswers(finalAnswers)
-          prependHistory(persona)
+
+          createHistoryEntry(persona).catch(() => {
+            /* 히스토리 실패는 UI 진행을 막지 않음 */
+          })
 
           navigate('/result', { replace: true })
         })
@@ -162,7 +165,7 @@ export default function PlannerPage() {
                 <div className="flex items-center gap-3">
                   <Spinner />
                   <p className="text-sm text-slate-700">
-                    OpenAI가 당신의 페르소나를 분석 중입니다...
+                    OpenAI가 당신의 MBTI를 분석 중입니다...
                   </p>
                 </div>
               </div>

@@ -5,16 +5,19 @@ export default function HeartButton({
   onClick,
   ariaLabel,
   title,
+  disabled,
 }: {
   active: boolean
   onClick: MouseEventHandler<HTMLButtonElement>
   ariaLabel: string
   title: string
+  disabled?: boolean
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className="flex h-10 w-10 items-center justify-center rounded-2xl border-2 border-slate-200 bg-white transition-colors hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
       aria-label={ariaLabel}
       title={title}

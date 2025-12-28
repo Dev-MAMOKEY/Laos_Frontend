@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from './keys'
 import { writeJson } from './storage'
-import type { Persona } from '../services/personaService'
+import type { Persona } from '../types/persona'
 
 export function getPersona(): Persona | null {
   const raw = sessionStorage.getItem(STORAGE_KEYS.persona)

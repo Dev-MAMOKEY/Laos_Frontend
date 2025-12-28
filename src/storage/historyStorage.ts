@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from './keys'
 import { readJson, writeJson } from './storage'
-import type { Persona } from '../services/personaService'
+import type { Persona } from '../types/persona'
 
 export type HistoryEntry = {
   id: string

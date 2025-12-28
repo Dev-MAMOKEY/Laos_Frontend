@@ -16,7 +16,15 @@ export function setAuthed(profile: AuthProfile, token?: string) {
   if (token) sessionStorage.setItem(STORAGE_KEYS.token, token)
 }
 
-export function clearAuth() {
+export function getAuthToken(): string | null {
+  return sessionStorage.getItem(STORAGE_KEYS.token)
+}
+
+export function getAuthEmail(): string | null {
+  return sessionStorage.getItem(STORAGE_KEYS.email)
+}
+
+export function clearAuth() { //로그아웃
   sessionStorage.removeItem(STORAGE_KEYS.auth)
   sessionStorage.removeItem(STORAGE_KEYS.email)
   sessionStorage.removeItem(STORAGE_KEYS.username)

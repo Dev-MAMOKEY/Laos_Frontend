@@ -1,26 +1,59 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import PageShell from '../components/layout/PageShell'
 import Card from '../components/ui/Card'
 import HeartButton from '../components/ui/HeartButton'
-import { getFavorites, setFavorites } from '../storage/favoritesStorage'
 import { getPersona } from '../storage/personaStorage'
+import { addFavorite, fetchFavorites, removeFavorite } from '../services/api'
 
 export default function ResultPage() {
   const persona = useMemo(() => getPersona(), [])
+  const [favorites, setFavoritesState] = useState<string[]>([])
+  const [favoritesError, setFavoritesError] = useState<string | null>(null)
+  const [favoritesLoading, setFavoritesLoading] = useState(true)
+  const [favoriteMutating, setFavoriteMutating] = useState<string | null>(null)
 
-  const [favorites, setFavoritesState] = useState<string[]>(() => getFavorites())
+  useEffect(() => {
+    if (!persona) return
+
+    setFavoritesLoading(true)
+    setFavoritesError(null)
+
+    fetchFavorites()
+      .then((ids) => {
+        setFavoritesState(ids)
+      })
+      .catch((e) => {
+        setFavoritesError(e instanceof Error ? e.message : '즐겨찾기를 불러오지 못했습니다.')
+      })
+      .finally(() => setFavoritesLoading(false))
+  }, [persona])
 
   if (!persona) {
     return <Navigate to="/planner" replace />
   }
 
   const onToggleFavorite = (destinationId: string) => {
+    setFavoritesError(null)
+    setFavoriteMutating(destinationId)
+
     setFavoritesState((prev) => {
-      const next = prev.includes(destinationId)
-        ? prev.filter((id) => id !== destinationId)
-        : [...prev, destinationId]
-      setFavorites(next)
+      const isAdding = !prev.includes(destinationId)
+      const snapshot = prev
+      const next = isAdding ? [...prev, destinationId] : prev.filter((id) => id !== destinationId)
+
+      const request = isAdding ? addFavorite(destinationId) : removeFavorite(destinationId)
+
+      request
+        .then((updated) => {
+          setFavoritesState(updated)
+        })
+        .catch((e) => {
+          setFavoritesState(snapshot)
+          setFavoritesError(e instanceof Error ? e.message : '즐겨찾기 처리에 실패했습니다.')
+        })
+        .finally(() => setFavoriteMutating(null))
+
       return next
     })
   }
@@ -73,6 +106,13 @@ export default function ResultPage() {
             아래로 내려가며 Day별 일정이 이어집니다.
           </p>
 
+          {favoritesLoading && (
+            <p className="mt-2 text-sm text-slate-500">즐겨찾기 동기화 중...</p>
+          )}
+          {!favoritesLoading && favoritesError && (
+            <p className="mt-2 text-sm text-red-700">{favoritesError}</p>
+          )}
+
           <div className="mt-4 space-y-3">
             {persona.itinerary.map((day) => (
               <div key={day.day} className="rounded-2xl border-2 border-slate-200 p-4">
@@ -101,6 +141,7 @@ export default function ResultPage() {
                           <HeartButton
                             active={isFavorite}
                             onClick={() => onToggleFavorite(item.id)}
+                            disabled={favoriteMutating === item.id}
                             ariaLabel={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
                             title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
                           />
