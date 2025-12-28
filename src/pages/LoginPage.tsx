@@ -5,7 +5,7 @@ import PageShell from '../components/layout/PageShell'
 import Card from '../components/ui/Card'
 import ToggleTabs from '../components/ui/ToggleTabs'
 import { setAuthed } from '../storage/authStorage'
-import { postLogin, postRegister } from '../services/api'
+import { postLogin, postRegister, postEmailCode } from '../services/api'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -18,9 +18,12 @@ export default function LoginPage() {
   const [signupUsername, setSignupUsername] = useState('')
   const [signupPassword, setSignupPassword] = useState('')
   const [signupPasswordConfirm, setSignupPasswordConfirm] = useState('')
+  const [signupEmailCode, setSignupEmailCode] = useState('')
 
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSendingCode, setIsSendingCode] = useState(false)
+  const [codeMessage, setCodeMessage] = useState<string | null>(null)
 
   const completeAuthAndGo = (email: string, username?: string) => {
     setAuthed({ email, username })
@@ -46,7 +49,6 @@ export default function LoginPage() {
         const token = res.token
         completeAuthAndGo(email, username)
         if (token) {
-          // setAuthed already stores token when provided
           setAuthed({ email, username }, token)
         }
       })
@@ -80,7 +82,7 @@ export default function LoginPage() {
       username,
       password: signupPassword,
       email,
-      'email-code': '000000',
+      'email-code': signupEmailCode.trim(),
     })
       .then((res) => {
         const token = res.token
@@ -91,6 +93,7 @@ export default function LoginPage() {
         setFormError(e instanceof Error ? e.message : '회원가입에 실패했습니다.')
       })
       .finally(() => setIsSubmitting(false))
+
   }
 
   return (
@@ -168,15 +171,41 @@ export default function LoginPage() {
                   <label className="text-sm font-medium text-slate-700" htmlFor="signupEmail">
                     이메일
                   </label>
-                  <input
-                    id="signupEmail"
-                    type="email"
-                    required
-                    value={signupEmail}
-                    onChange={(e) => setSignupEmail(e.target.value)}
-                    className="mt-2 w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-blue-500"
-                    placeholder="you@example.com"
-                  />
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      id="signupEmail"
+                      type="email"
+                      required
+                      value={signupEmail}
+                      onChange={(e) => setSignupEmail(e.target.value)}
+                      className="w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-blue-500"
+                      placeholder="you@example.com"
+                    />
+                    <button
+                      type="button"
+                      disabled={isSendingCode || !signupEmail.trim()}
+                      onClick={() => {
+                        setFormError(null)
+                        setCodeMessage(null)
+                        const email = signupEmail.trim()
+                        if (!email) return
+                        setIsSendingCode(true)
+                        // 이메일 인증 코드 발송. 백엔드 미구현 시 에러만 표시됨.
+                        postEmailCode({ email })
+                          .then((res) => {
+                            setCodeMessage(res.message ?? '인증 코드를 발송했습니다.')
+                          })
+                          .catch((e) => {
+                            setFormError(e instanceof Error ? e.message : '인증 코드를 보내지 못했습니다.')
+                          })
+                          .finally(() => setIsSendingCode(false))
+                      }}
+                      className="whitespace-nowrap rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-blue-50 disabled:opacity-60"
+                    >
+                      {isSendingCode ? '발송 중...' : '코드 발송'}
+                    </button>
+                  </div>
+                  {codeMessage && <p className="mt-2 text-xs text-green-700">{codeMessage}</p>}
                 </div>
 
                 <div>
@@ -226,6 +255,21 @@ export default function LoginPage() {
                     onChange={(e) => setSignupPasswordConfirm(e.target.value)}
                     className="mt-2 w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-blue-500"
                     placeholder="비밀번호를 다시 입력"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-slate-700" htmlFor="signupEmailCode">
+                    이메일 인증코드
+                  </label>
+                  <input
+                    id="signupEmailCode"
+                    type="text"
+                    required
+                    value={signupEmailCode}
+                    onChange={(e) => setSignupEmailCode(e.target.value)}
+                    className="mt-2 w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-blue-500"
+                    placeholder="메일로 받은 코드를 입력하세요"
                   />
                 </div>
 

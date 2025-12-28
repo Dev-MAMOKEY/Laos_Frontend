@@ -154,6 +154,11 @@ export async function postLogin(payload: {
   return apiRequest<AuthResponse>('/login', { method: 'POST', body: payload, skipAuth: true })
 }
 
+export async function postEmailCode(payload: { email: string }): Promise<AuthResponse> {
+  // 이메일 인증 코드 요청
+  return apiRequest<AuthResponse>('/auth/email/send', { method: 'POST', body: payload, skipAuth: true })
+}
+
 export async function fetchFavorites(): Promise<string[]> {
   const res = await apiRequest<unknown>('/favorites')
   return normalizeFavoriteIds(res)
