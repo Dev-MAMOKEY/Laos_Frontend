@@ -1,227 +1,161 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
 import PageShell from '../components/layout/PageShell'
 import Card from '../components/ui/Card'
-import ToggleTabs from '../components/ui/ToggleTabs'
-import HeartButton from '../components/ui/HeartButton'
-import {
-  addFavorite,
-  fetchFavorites,
-  fetchHistory,
-  removeFavorite,
-  type HistoryEntry,
-} from '../services/api'
+import { fetchFavorites, fetchHistory, addFavorite, removeFavorite, type BookmarkItem, type HistoryEntry } from '../services/api'
 
-export default function FavoritesPage() {
-  const [tab, setTab] = useState<'history' | 'favorites'>('favorites')
+function useHistoryList() {
+  const [data, setData] = useState<HistoryEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const [history, setHistory] = useState<HistoryEntry[]>([])
-  const [historyError, setHistoryError] = useState<string | null>(null)
-  const [historyLoading, setHistoryLoading] = useState(true)
-
-  const [favorites, setFavorites] = useState<string[]>([])
-  const [favoritesError, setFavoritesError] = useState<string | null>(null)
-  const [favoritesLoading, setFavoritesLoading] = useState(true)
-  const [favoriteMutating, setFavoriteMutating] = useState<string | null>(null)
-
-  const loadHistory = useCallback(async () => {
-    setHistoryLoading(true)
-    setHistoryError(null)
-    try {
-      const result = await fetchHistory()
-      setHistory(result.slice().sort((a, b) => b.createdAt - a.createdAt))
-    } catch (e) {
-      setHistoryError(e instanceof Error ? e.message : '히스토리를 불러오지 못했습니다.')
-    } finally {
-      setHistoryLoading(false)
-    }
-  }, [])
-
-  const loadFavorites = useCallback(async () => {
-    setFavoritesLoading(true)
-    setFavoritesError(null)
-    try {
-      const result = await fetchFavorites()
-      setFavorites(result)
-    } catch (e) {
-      setFavoritesError(e instanceof Error ? e.message : '즐겨찾기를 불러오지 못했습니다.')
-    } finally {
-      setFavoritesLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    loadHistory()
-    loadFavorites()
-  }, [loadFavorites, loadHistory])
-
-  const favoriteItems = useMemo(() => {
-    if (favorites.length === 0) return [] as { id: string; title: string; description: string; dayLabel?: string }[]
-
-    const itemMap = new Map<string, { title: string; description: string; dayLabel?: string }>()
-
-    for (const entry of history) {
-      for (const day of entry.persona.itinerary) {
-        for (const item of day.items) {
-          itemMap.set(item.id, {
-            title: item.title,
-            description: item.description,
-            dayLabel: `Day ${day.day} · ${day.title}`,
-          })
-        }
-      }
-    }
-
-    return favorites
-      .map((id) => {
-        const meta = itemMap.get(id)
-        if (!meta) return null
-        return { id, ...meta }
-      })
-      .filter(Boolean) as { id: string; title: string; description: string; dayLabel?: string }[]
-  }, [favorites, history])
-
-  const onToggleFavorite = (id: string) => {
-    setFavoritesError(null)
-    setFavoriteMutating(id)
-
-    setFavorites((prev) => {
-      const isAdding = !prev.includes(id)
-      const snapshot = prev
-      const next = isAdding ? [...prev, id] : prev.filter((x) => x !== id)
-
-      const request = isAdding ? addFavorite(id) : removeFavorite(id)
-
-      request
-        .then((updated) => {
-          setFavorites(updated)
-        })
-        .catch((e) => {
-          setFavorites(snapshot)
-          setFavoritesError(e instanceof Error ? e.message : '즐겨찾기 처리에 실패했습니다.')
-        })
-        .finally(() => setFavoriteMutating(null))
-
-      return next
-    })
+  const refresh = () => {
+    setLoading(true)
+    setError(null)
+    fetchHistory()
+      .then(setData)
+      .catch((e) => setError(e instanceof Error ? e.message : '히스토리를 불러오지 못했습니다.'))
+      .finally(() => setLoading(false))
   }
 
+  useEffect(() => {
+    refresh()
+  }, [])
+
+  return { data, loading, error, refresh }
+}
+
+function useFavorites() {
+  const [data, setData] = useState<BookmarkItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [mutating, setMutating] = useState<string | null>(null)
+
+  const refresh = () => {
+    setLoading(true)
+    setError(null)
+    fetchFavorites()
+      .then(setData)
+      .catch((e) => setError(e instanceof Error ? e.message : '즐겨찾기를 불러오지 못했습니다.'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    refresh()
+  }, [])
+
+  const toggle = async (ai_num: string) => {
+    const existing = data.find((f) => f.ai_num === ai_num)
+    const like = existing?.like_num ?? ai_num
+    setMutating(like)
+    setError(null)
+
+    try {
+      if (existing) {
+        await removeFavorite(like)
+        setData((prev) => prev.filter((f) => f.ai_num !== ai_num))
+      } else {
+        const created = await addFavorite(ai_num, ai_num)
+        setData((prev) => [...prev, created])
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '즐겨찾기 처리에 실패했습니다.')
+    } finally {
+      setMutating(null)
+    }
+  }
+
+  return { data, loading, error, mutating, toggle, refresh }
+}
+
+export default function FavoritesPage() {
+  const history = useHistoryList()
+  const favorites = useFavorites()
+
+  const favoriteSet = useMemo(() => new Set(favorites.data.map((f) => f.ai_num)), [favorites.data])
+
   return (
-    <PageShell>
+    <PageShell outerClassName="py-6">
       <div className="space-y-4">
         <Card>
-          <div className="flex items-start justify-between gap-3">
+          <h1 className="text-2xl font-bold text-slate-900">즐겨찾기</h1>
+          <p className="mt-1 text-sm text-slate-600">히스토리에서 바로 즐겨찾기를 관리하세요.</p>
+        </Card>
+
+        <Card>
+          <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">내 보관함</h1>
-              <p className="mt-1 text-sm text-slate-600">히스토리와 즐겨찾기를 확인하세요.</p>
+              <h2 className="text-lg font-semibold text-slate-900">히스토리</h2>
+              <p className="mt-1 text-sm text-slate-600">생성된 항목을 즐겨찾기에 추가할 수 있습니다.</p>
             </div>
-            <Link
-              to="/result"
-              className="inline-flex rounded-2xl border-2 border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-blue-50"
+            <button
+              type="button"
+              onClick={history.refresh}
+              className="rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-blue-50"
             >
-              결과로
-            </Link>
+              새로고침
+            </button>
           </div>
 
-          <div className="mt-5">
-            <ToggleTabs
-              value={tab}
-              onChange={setTab}
-              left={{ value: 'favorites', label: '즐겨찾기' }}
-              right={{ value: 'history', label: '히스토리' }}
-            />
+          <div className="mt-3 space-y-2">
+            {history.loading && <p className="text-sm text-slate-600">불러오는 중...</p>}
+            {!history.loading && history.error && <p className="text-sm text-red-700">{history.error}</p>}
+            {!history.loading && history.data.length === 0 && !history.error && (
+              <p className="text-sm text-slate-600">히스토리가 없습니다.</p>
+            )}
+
+            {history.data.map((h) => {
+              const isFav = favoriteSet.has(h.ai_num)
+              return (
+                <div key={h.ai_num} className="flex items-center justify-between rounded-2xl border-2 border-slate-200 bg-white px-3 py-2">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{h.title}</p>
+                    <p className="text-xs text-slate-600">ai_num: {h.ai_num}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => favorites.toggle(h.ai_num)}
+                    disabled={favorites.mutating === h.ai_num}
+                    className={
+                      'rounded-2xl border-2 px-3 py-1 text-xs font-semibold transition-colors ' +
+                      (isFav
+                        ? 'border-blue-200 bg-blue-50 text-blue-700'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-blue-50')
+                    }
+                  >
+                    {isFav ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </Card>
 
-        {tab === 'favorites' ? (
-          <Card>
-            <h2 className="text-lg font-semibold text-slate-900">즐겨찾기</h2>
-            <p className="mt-1 text-sm text-slate-600">저장한 일정 항목이 여기에 모입니다.</p>
+        <Card>
+          <h2 className="text-lg font-semibold text-slate-900">즐겨찾기 목록</h2>
+          <p className="mt-1 text-sm text-slate-600">현재 저장된 즐겨찾기입니다.</p>
 
-            <div className="mt-4 space-y-3">
-              {favoritesLoading && (
-                <p className="text-sm text-slate-600">즐겨찾기를 불러오는 중입니다...</p>
-              )}
+          <div className="mt-3 space-y-2">
+            {favorites.loading && <p className="text-sm text-slate-600">불러오는 중...</p>}
+            {!favorites.loading && favorites.error && <p className="text-sm text-red-700">{favorites.error}</p>}
+            {!favorites.loading && favorites.data.length === 0 && !favorites.error && (
+              <p className="text-sm text-slate-600">즐겨찾기가 없습니다.</p>
+            )}
 
-              {!favoritesLoading && favoritesError && (
-                <p className="text-sm text-red-700">{favoritesError}</p>
-              )}
-
-              {!favoritesLoading && favorites.length === 0 && !favoritesError && (
-                <p className="text-sm text-slate-600">아직 즐겨찾기가 없습니다.</p>
-              )}
-
-              {favorites.length > 0 && favoriteItems.length === 0 && (
-                <p className="text-sm text-slate-600">
-                  즐겨찾기 데이터는 있지만, 연결된 히스토리가 없습니다.
-                </p>
-              )}
-
-              {favoriteItems.map((item) => {
-                const isFavorite = favorites.includes(item.id)
-                return (
-                  <div key={item.id} className="rounded-2xl border-2 border-slate-200 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        {item.dayLabel && (
-                          <p className="text-xs font-medium text-slate-500">{item.dayLabel}</p>
-                        )}
-                        <p className="mt-1 text-sm font-semibold text-slate-900">{item.title}</p>
-                        <p className="mt-1 text-xs text-slate-600">{item.description}</p>
-                      </div>
-                      <HeartButton
-                        active={isFavorite}
-                        onClick={() => onToggleFavorite(item.id)}
-                        disabled={favoriteMutating === item.id}
-                        ariaLabel={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
-                        title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </Card>
-        ) : (
-          <Card>
-            <h2 className="text-lg font-semibold text-slate-900">히스토리</h2>
-            <p className="mt-1 text-sm text-slate-600">이전에 생성된 결과 목록입니다.</p>
-
-            <div className="mt-4 space-y-3">
-              {historyLoading && (
-                <p className="text-sm text-slate-600">히스토리를 불러오는 중입니다...</p>
-              )}
-
-              {!historyLoading && historyError && (
-                <p className="text-sm text-red-700">{historyError}</p>
-              )}
-
-              {!historyLoading && history.length === 0 && !historyError ? (
-                <p className="text-sm text-slate-600">아직 히스토리가 없습니다.</p>
-              ) : (
-                history.map((h) => (
-                  <div key={h.id} className="rounded-2xl border-2 border-slate-200 p-4">
-                    <p className="text-xs text-slate-500">
-                      {new Date(h.createdAt).toLocaleString('ko-KR')}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">{h.persona.keyword}</p>
-                    <p className="mt-1 text-xs text-slate-600 line-clamp-2">{h.persona.description}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {h.persona.tags.slice(0, 6).map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-700"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </Card>
-        )}
+            {favorites.data.map((f) => (
+              <div key={f.like_num} className="flex items-center justify-between rounded-2xl border-2 border-slate-200 bg-white px-3 py-2">
+                <div className="text-sm text-slate-800">ai_num: {f.ai_num} · like_num: {f.like_num}</div>
+                <button
+                  type="button"
+                  onClick={() => favorites.toggle(f.ai_num)}
+                  disabled={favorites.mutating === f.like_num}
+                  className="rounded-2xl border-2 border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-blue-50"
+                >
+                  삭제
+                </button>
+              </div>
+            ))}
+          </div>
+        </Card>
       </div>
     </PageShell>
   )

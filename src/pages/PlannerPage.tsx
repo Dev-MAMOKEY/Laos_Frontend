@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { QUESTIONS } from '../questions'
-import { analyzePersonaAsync } from '../services/personaService'
-import { createHistoryEntry } from '../services/api'
 import PageShell from '../components/layout/PageShell'
 import ProgressBar from '../components/ui/ProgressBar'
 import Spinner from '../components/ui/Spinner'
-import { setAnswers, setPersona } from '../storage/personaStorage'
+import { setAnswers } from '../storage/personaStorage'
 
 type Message = {
   id: string
@@ -62,27 +60,6 @@ export default function PlannerPage() {
     ])
   }
 
-  const startAnalyze = (finalAnswers: number[]) => {
-    setIsLoading(true)
-
-    window.setTimeout(() => {
-      analyzePersonaAsync(finalAnswers)
-        .then((persona) => {
-          setPersona(persona)
-          setAnswers(finalAnswers)
-
-          createHistoryEntry(persona).catch(() => {
-            /* 히스토리 실패는 UI 진행을 막지 않음 */
-          })
-
-          navigate('/result', { replace: true })
-        })
-        .finally(() => {
-          setIsLoading(false)
-        })
-    }, 600)
-  }
-
   const onSelect = (optionIndex: number) => {
     if (!currentQuestion || isLoading) return
 
@@ -96,7 +73,9 @@ export default function PlannerPage() {
     setAnswersState((prev) => {
       const next = [...prev, optionIndex]
       if (next.length === totalSteps) {
-        startAnalyze(next)
+        setAnswers(next)
+        setIsLoading(true)
+        navigate('/planner/question', { replace: true })
       }
       return next
     })
@@ -165,7 +144,7 @@ export default function PlannerPage() {
                 <div className="flex items-center gap-3">
                   <Spinner />
                   <p className="text-sm text-slate-700">
-                    OpenAI가 당신의 MBTI를 분석 중입니다...
+                    다음 질문으로 이동 중입니다...
                   </p>
                 </div>
               </div>

@@ -1,9 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import AuthCallbackPage from './pages/AuthCallbackPage'
 import AuthStartPage from './pages/AuthStartPage'
-import FavoritesPage from './pages/FavoritesPage'
 import LoginPage from './pages/LoginPage'
 import PlannerPage from './pages/PlannerPage'
+import FollowupQuestionPage from './pages/FollowupQuestionPage'
 import ResultPage from './pages/ResultPage'
 import { isAuthed } from './storage/authStorage'
 
@@ -28,18 +28,18 @@ export default function App() {
         }
       />
       <Route
-        path="/result"
+        path="/planner/question"
         element={
           <RequireAuth>
-            <ResultPage />
+            <FollowupQuestionPage />
           </RequireAuth>
         }
       />
       <Route
-        path="/favorites"
+        path="/result"
         element={
           <RequireAuth>
-            <FavoritesPage />
+            <ResultPage />
           </RequireAuth>
         }
       />

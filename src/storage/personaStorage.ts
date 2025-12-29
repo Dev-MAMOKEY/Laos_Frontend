@@ -19,3 +19,14 @@ export function setPersona(persona: Persona) {
 export function setAnswers(answers: number[]) {
   writeJson(sessionStorage, STORAGE_KEYS.answers, answers)
 }
+
+export function getAnswers(): number[] | null {
+  const raw = sessionStorage.getItem(STORAGE_KEYS.answers)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as number[]) : null
+  } catch {
+    return null
+  }
+}

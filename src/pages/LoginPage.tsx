@@ -5,7 +5,9 @@ import PageShell from '../components/layout/PageShell'
 import Card from '../components/ui/Card'
 import ToggleTabs from '../components/ui/ToggleTabs'
 import { setAuthed } from '../storage/authStorage'
-import { postLogin, postRegister, postEmailCode } from '../services/api'
+import { postLogin, postRegister, 
+  // postEmailCode
+ } from '../services/api'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -18,12 +20,12 @@ export default function LoginPage() {
   const [signupUsername, setSignupUsername] = useState('')
   const [signupPassword, setSignupPassword] = useState('')
   const [signupPasswordConfirm, setSignupPasswordConfirm] = useState('')
-  const [signupEmailCode, setSignupEmailCode] = useState('')
+  // const [signupEmailCode, setSignupEmailCode] = useState('') // 이메일 인증코드 주석처리
 
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isSendingCode, setIsSendingCode] = useState(false)
-  const [codeMessage, setCodeMessage] = useState<string | null>(null)
+  // const [isSendingCode, setIsSendingCode] = useState(false) // 이메일 인증 코드 발송 상태
+  // const [codeMessage, setCodeMessage] = useState<string | null>(null) // 인증 코드 발송 메시지 상태
 
   const completeAuthAndGo = (email: string, username?: string) => {
     setAuthed({ email, username })
@@ -82,7 +84,7 @@ export default function LoginPage() {
       username,
       password: signupPassword,
       email,
-      'email-code': signupEmailCode.trim(),
+      // 'email-code': signupEmailCode.trim(),
     })
       .then((res) => {
         const token = res.token
@@ -161,9 +163,9 @@ export default function LoginPage() {
                   {isSubmitting ? '로그인 중...' : '로그인'}
                 </button>
 
-                <p className="text-xs text-slate-500">
+                {/* <p className="text-xs text-slate-500">
                   데모용 UI입니다. 실제 인증은 연결되어 있지 않습니다.
-                </p>
+                </p> */}
             </form>
           ) : (
             <form className="space-y-4" onSubmit={onSubmitSignup}>
@@ -181,7 +183,7 @@ export default function LoginPage() {
                       className="w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-blue-500"
                       placeholder="you@example.com"
                     />
-                    <button
+                    {/* <button
                       type="button"
                       disabled={isSendingCode || !signupEmail.trim()}
                       onClick={() => {
@@ -203,9 +205,9 @@ export default function LoginPage() {
                       className="whitespace-nowrap rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-blue-50 disabled:opacity-60"
                     >
                       {isSendingCode ? '발송 중...' : '코드 발송'}
-                    </button>
+                    </button> */} {/* 인증 코드 발송 버튼 주석처리*/}
                   </div>
-                  {codeMessage && <p className="mt-2 text-xs text-green-700">{codeMessage}</p>}
+                  {/* {codeMessage && <p className="mt-2 text-xs text-green-700">{codeMessage}</p>} */}  {/* 인증 코드 발송 메시지 주석처리*/}
                 </div>
 
                 <div>
@@ -258,7 +260,7 @@ export default function LoginPage() {
                   />
                 </div>
 
-                <div>
+                {/* <div>
                   <label className="text-sm font-medium text-slate-700" htmlFor="signupEmailCode">
                     이메일 인증코드
                   </label>
@@ -271,7 +273,7 @@ export default function LoginPage() {
                     className="mt-2 w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-blue-500"
                     placeholder="메일로 받은 코드를 입력하세요"
                   />
-                </div>
+                </div> */} {/* 이메일 인증코드 입력란 주석처리*/}
 
                 <button
                   type="submit"
@@ -301,13 +303,13 @@ export default function LoginPage() {
             >
               Google
             </button>
-            <button
+            {/* <button
               type="button"
               onClick={() => onSocialLogin('facebook')}
               className="rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-lg transition-colors hover:bg-blue-50"
             >
               Facebook
-            </button>
+            </button> */}
           </div>
         </div>
       </Card>

@@ -20,6 +20,10 @@ export function getAuthToken(): string | null {
   return sessionStorage.getItem(STORAGE_KEYS.token)
 }
 
+export function getAuthUsername(): string | null {
+  return sessionStorage.getItem(STORAGE_KEYS.username)
+}
+
 export function getAuthEmail(): string | null {
   return sessionStorage.getItem(STORAGE_KEYS.email)
 }

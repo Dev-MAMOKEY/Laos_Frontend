@@ -2,30 +2,28 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import PageShell from '../components/layout/PageShell'
 import Card from '../components/ui/Card'
-import HeartButton from '../components/ui/HeartButton'
 import { getPersona } from '../storage/personaStorage'
-import { addFavorite, fetchFavorites, removeFavorite } from '../services/api'
+import { addFavorite, fetchFavorites, removeFavorite, type BookmarkItem } from '../services/api'
+
+function findLikeNum(favorites: BookmarkItem[], aiId: string): string | null {
+  const hit = favorites.find((f) => f.ai_num === aiId)
+  return hit ? hit.like_num : null
+}
 
 export default function ResultPage() {
   const persona = useMemo(() => getPersona(), [])
-  const [favorites, setFavoritesState] = useState<string[]>([])
+  const [favorites, setFavorites] = useState<BookmarkItem[]>([])
   const [favoritesError, setFavoritesError] = useState<string | null>(null)
   const [favoritesLoading, setFavoritesLoading] = useState(true)
-  const [favoriteMutating, setFavoriteMutating] = useState<string | null>(null)
+  const [mutatingLike, setMutatingLike] = useState<string | null>(null)
 
   useEffect(() => {
     if (!persona) return
-
     setFavoritesLoading(true)
     setFavoritesError(null)
-
     fetchFavorites()
-      .then((ids) => {
-        setFavoritesState(ids)
-      })
-      .catch((e) => {
-        setFavoritesError(e instanceof Error ? e.message : '즐겨찾기를 불러오지 못했습니다.')
-      })
+      .then(setFavorites)
+      .catch((e) => setFavoritesError(e instanceof Error ? e.message : '즐겨찾기를 불러오지 못했습니다.'))
       .finally(() => setFavoritesLoading(false))
   }, [persona])
 
@@ -33,29 +31,24 @@ export default function ResultPage() {
     return <Navigate to="/planner" replace />
   }
 
-  const onToggleFavorite = (destinationId: string) => {
+  const toggleFavorite = async (aiId: string) => {
+    const existingLike = findLikeNum(favorites, aiId)
     setFavoritesError(null)
-    setFavoriteMutating(destinationId)
+    setMutatingLike(existingLike ?? aiId)
 
-    setFavoritesState((prev) => {
-      const isAdding = !prev.includes(destinationId)
-      const snapshot = prev
-      const next = isAdding ? [...prev, destinationId] : prev.filter((id) => id !== destinationId)
-
-      const request = isAdding ? addFavorite(destinationId) : removeFavorite(destinationId)
-
-      request
-        .then((updated) => {
-          setFavoritesState(updated)
-        })
-        .catch((e) => {
-          setFavoritesState(snapshot)
-          setFavoritesError(e instanceof Error ? e.message : '즐겨찾기 처리에 실패했습니다.')
-        })
-        .finally(() => setFavoriteMutating(null))
-
-      return next
-    })
+    try {
+      if (existingLike) {
+        await removeFavorite(existingLike)
+        setFavorites((prev) => prev.filter((f) => f.ai_num !== aiId))
+      } else {
+        const created = await addFavorite(aiId, aiId)
+        setFavorites((prev) => [...prev, created])
+      }
+    } catch (e) {
+      setFavoritesError(e instanceof Error ? e.message : '즐겨찾기 처리에 실패했습니다.')
+    } finally {
+      setMutatingLike(null)
+    }
   }
 
   return (
@@ -123,7 +116,8 @@ export default function ResultPage() {
 
                 <div className="mt-3 space-y-2">
                   {day.items.map((item) => {
-                    const isFavorite = favorites.includes(item.id)
+                    const likeNum = findLikeNum(favorites, item.id)
+                    const isFavorite = Boolean(likeNum)
                     return (
                       <div
                         key={item.id}
@@ -138,13 +132,19 @@ export default function ResultPage() {
                               {item.description}
                             </p>
                           </div>
-                          <HeartButton
-                            active={isFavorite}
-                            onClick={() => onToggleFavorite(item.id)}
-                            disabled={favoriteMutating === item.id}
-                            ariaLabel={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
-                            title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
-                          />
+                          <button
+                            type="button"
+                            onClick={() => toggleFavorite(item.id)}
+                            disabled={mutatingLike === likeNum || mutatingLike === item.id}
+                            className={
+                              'inline-flex items-center rounded-2xl border-2 px-3 py-1 text-xs font-semibold transition-colors ' +
+                              (isFavorite
+                                ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                : 'border-slate-200 bg-white text-slate-700 hover:bg-blue-50')
+                            }
+                          >
+                            {isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
+                          </button>
                         </div>
                       </div>
                     )

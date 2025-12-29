@@ -1,12 +1,6 @@
 import axios, { AxiosHeaders, type AxiosInstance, type AxiosRequestHeaders } from 'axios'
 import type { Persona } from '../types/persona'
-import { getAuthToken } from '../storage/authStorage'
-
-export type HistoryEntry = {
-  id: string
-  createdAt: number
-  persona: Persona
-}
+import { getAuthToken, getAuthUsername, getAuthEmail } from '../storage/authStorage'
 
 export type AuthResponse = {
   status?: number
@@ -16,6 +10,23 @@ export type AuthResponse = {
   username?: string
 }
 
+export type BookmarkItem = {
+  ai_num: string
+  like_num: string
+}
+
+export type HistoryEntry = {
+  ai_num: string
+  title: string
+}
+
+export type OAuthTokenResponse = {
+  access_token?: string
+  refresh_token?: string
+  expires_in?: number
+  token_type?: string
+}
+
 type ApiInit = {
   method?: 'GET' | 'POST' | 'DELETE'
   body?: unknown
@@ -23,6 +34,7 @@ type ApiInit = {
   skipAuth?: boolean
   signal?: AbortSignal
   baseOverride?: string
+  headers?: Record<string, string>
 }
 
 function normalizeBase(url: string | undefined): string | undefined {
@@ -33,7 +45,16 @@ function normalizeBase(url: string | undefined): string | undefined {
 function ensureApiBase(): string {
   const base = normalizeBase(import.meta.env.VITE_API_BASE_URL as string | undefined)
   if (!base) throw new Error('VITE_API_BASE_URL이 설정되지 않았습니다.')
-  return base
+  return base //API 기본 URL
+}
+
+function resolveUserIdPathParam(): string {
+  // 우선 username, 없으면 email, 모두 없으면 'me'
+  const username = getAuthUsername()
+  if (username && username.trim()) return encodeURIComponent(username.trim())
+  const email = getAuthEmail()
+  if (email && email.trim()) return encodeURIComponent(email.trim())
+  return 'me'
 }
 
 function createClient(baseURL: string): AxiosInstance {
@@ -54,7 +75,7 @@ async function apiRequest<T>(path: string, init: ApiInit = {}): Promise<T> {
   const { baseOverride, skipAuth, method = 'GET', body, signal } = init
   const client = getClient(baseOverride)
 
-  const headers: AxiosRequestHeaders = new AxiosHeaders({ 'Content-Type': 'application/json' })
+  const headers: AxiosRequestHeaders = new AxiosHeaders({ 'Content-Type': 'application/json', ...(init.headers ?? {}) })
   if (!skipAuth) {
     const token = init.token ?? getAuthToken()
     if (token) headers.Authorization = `Bearer ${token}`
@@ -81,44 +102,7 @@ async function apiRequest<T>(path: string, init: ApiInit = {}): Promise<T> {
   }
 }
 
-function normalizeFavoriteIds(payload: unknown): string[] {
-  if (Array.isArray(payload) && payload.every((v) => typeof v === 'string')) {
-    return payload as string[]
-  }
-  if (payload && typeof payload === 'object') {
-    const candidate = (payload as { favorites?: unknown; ids?: unknown }).favorites ?? (payload as { favorites?: unknown; ids?: unknown }).ids
-    if (Array.isArray(candidate) && candidate.every((v) => typeof v === 'string')) {
-      return candidate as string[]
-    }
-  }
-  return []
-}
-
-function toHistoryEntry(raw: unknown): HistoryEntry | null {
-  if (!raw || typeof raw !== 'object') return null
-  const obj = raw as { id?: unknown; createdAt?: unknown; persona?: unknown }
-  if (typeof obj.id !== 'string') return null
-  if (typeof obj.createdAt !== 'number') return null
-  if (!obj.persona || typeof obj.persona !== 'object') return null
-  return { id: obj.id, createdAt: obj.createdAt, persona: obj.persona as Persona }
-}
-
-function normalizeHistory(payload: unknown): HistoryEntry[] {
-  if (Array.isArray(payload)) {
-    return payload.map(toHistoryEntry).filter(Boolean) as HistoryEntry[]
-  }
-  if (payload && typeof payload === 'object') {
-    const maybeEntries = (payload as { history?: unknown; entries?: unknown }).history ?? (payload as { history?: unknown; entries?: unknown }).entries
-    if (Array.isArray(maybeEntries)) {
-      return maybeEntries.map(toHistoryEntry).filter(Boolean) as HistoryEntry[]
-    }
-    const single = toHistoryEntry(payload)
-    if (single) return [single]
-  }
-  return []
-}
-
-export async function postPersonaAnalysis(answers: number[]): Promise<Persona> {
+export async function postPersonaAnalysis(answers: number[], prompt?: string): Promise<Persona> {
   const personaBase =
     normalizeBase(import.meta.env.VITE_API_BASE_URL as string | undefined) ??
     normalizeBase(import.meta.env.VITE_PERSONA_API_URL as string | undefined)
@@ -127,11 +111,21 @@ export async function postPersonaAnalysis(answers: number[]): Promise<Persona> {
     throw new Error('VITE_API_BASE_URL 또는 VITE_PERSONA_API_URL이 필요합니다.')
   }
 
-  return apiRequest<Persona>('/persona/analyze', {
+  // MBTI 테스트 백엔드에 답변과 선택적 자연어 조건을 전송
+  return apiRequest<Persona>('/mbti/test', {
     method: 'POST',
-    body: { answers },
-    skipAuth: true,
+    body: { answers, prompt },
+    // MBTI 테스트는 인증이 필요하므로 기본 토큰 전송
+    skipAuth: false,
     baseOverride: personaBase,
+  })
+}
+
+export async function postQuestion(payload: { content: string; answers?: number[] }): Promise<Persona> {
+  // 질문 등록 엔드포인트로 자연어 요청과(선택) 답변 배열을 보냄
+  return apiRequest<Persona>('/question', {
+    method: 'POST',
+    body: payload,
   })
 }
 
@@ -140,7 +134,7 @@ export async function postRegister(payload: {
   password: string
   username: string
   email: string
-  'email-code': string
+  // 'email-code': string
 }): Promise<AuthResponse> {
   // 회원가입 요청을 백엔드로 위임한다. 백엔드 미구현 시 에러만 반환됨.
   return apiRequest<AuthResponse>('/register', { method: 'POST', body: payload, skipAuth: true })
@@ -150,7 +144,7 @@ export async function postLogin(payload: {
     user_id: string; 
     password: string 
 }): Promise<AuthResponse> {
-  // 로그인 요청을 백엔드로 위임한다. 백엔드 미구현 시 에러만 반환됨.
+  // 로그인 요청을 
   return apiRequest<AuthResponse>('/login', { method: 'POST', body: payload, skipAuth: true })
 }
 
@@ -158,39 +152,82 @@ export async function postEmailCode(payload: { email: string }): Promise<AuthRes
   // 이메일 인증 코드 요청
   return apiRequest<AuthResponse>('/auth/email/send', { method: 'POST', body: payload, skipAuth: true })
 }
+// export async function 
 
-export async function fetchFavorites(): Promise<string[]> {
-  const res = await apiRequest<unknown>('/favorites')
-  return normalizeFavoriteIds(res)
+export async function postFacebookOAuthCallback(code: string): Promise<OAuthTokenResponse> {
+  // 페이스북 OAuth 콜백: 인가 코드를 Authorization 헤더로 전달
+  const base = normalizeBase(import.meta.env.VITE_BASE_API_URL as string | undefined) ?? ensureApiBase()
+  return apiRequest<OAuthTokenResponse>('/oauth/callback/facebook', {
+    method: 'POST',
+    skipAuth: true,
+    headers: { Authorization: code },
+    baseOverride: base,
+  })
 }
 
-export async function addFavorite(destinationId: string): Promise<string[]> {
-  const res = await apiRequest<unknown>('/favorites', { method: 'POST', body: { destinationId } })
-  return normalizeFavoriteIds(res)
+export async function postGoogleOAuthCallback(code: string): Promise<OAuthTokenResponse> {
+  // 구글 OAuth 콜백: 인가 코드를 Authorization 헤더로 전달
+  const base = normalizeBase(import.meta.env.VITE_AUTH_API_URL as string | undefined) ?? ensureApiBase()
+  return apiRequest<OAuthTokenResponse>('/oauth/callback/google', {
+    method: 'POST',
+    skipAuth: true,
+    headers: { Authorization: code },
+    baseOverride: base,
+  })
 }
 
-export async function removeFavorite(destinationId: string): Promise<string[]> {
-  const res = await apiRequest<unknown>(`/favorites/${encodeURIComponent(destinationId)}`, {
+export async function fetchFavorites(): Promise<BookmarkItem[]> {
+  const userId = resolveUserIdPathParam()
+  const res = await apiRequest<unknown>(`/bookmark-list/${userId}`, { method: 'GET' })
+
+  if (!res || typeof res !== 'object') return []
+  const arr = Array.isArray((res as { favorites?: unknown[] }).favorites)
+    ? ((res as { favorites?: unknown[] }).favorites as unknown[])
+    : Array.isArray((res as unknown[]))
+      ? (res as unknown[])
+      : []
+
+  return arr
+    .map((v) => {
+      if (!v || typeof v !== 'object') return null
+      const obj = v as { ai_num?: unknown; like_num?: unknown }
+      if (obj.ai_num === undefined || obj.like_num === undefined) return null
+      return { ai_num: String(obj.ai_num), like_num: String(obj.like_num) }
+    })
+    .filter((v): v is BookmarkItem => Boolean(v))
+}
+
+export async function addFavorite(ai_num: string, like_num: string): Promise<BookmarkItem> {
+  const userId = resolveUserIdPathParam()
+  const res = await apiRequest<unknown>(`/add/bookmark/${userId}`, {
+    method: 'POST',
+    body: { ai_num, like_num },
+  })
+
+  const obj = res as { ai_num?: unknown; like_num?: unknown }
+  return {
+    ai_num: String(obj?.ai_num ?? ai_num),
+    like_num: String(obj?.like_num ?? like_num),
+  }
+}
+
+export async function removeFavorite(like_num: string): Promise<void> {
+  const userId = resolveUserIdPathParam()
+  await apiRequest<unknown>(`/delete/bookmark/${userId}/${encodeURIComponent(like_num)}`, {
     method: 'DELETE',
   })
-  return normalizeFavoriteIds(res)
 }
 
 export async function fetchHistory(): Promise<HistoryEntry[]> {
-  const res = await apiRequest<unknown>('/history')
-  return normalizeHistory(res)
-}
+  const res = await apiRequest<unknown>('/view/history', { method: 'GET' })
+  if (!Array.isArray(res)) return []
 
-export async function createHistoryEntry(persona: Persona): Promise<HistoryEntry> {
-  const res = await apiRequest<unknown>('/history', { method: 'POST', body: { persona } })
-  const normalized = normalizeHistory(res)
-  if (normalized.length > 0) return normalized[0]
-
-  return {
-    id: typeof crypto !== 'undefined' && 'randomUUID' in crypto && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : `history_${Date.now()}_${Math.random().toString(16).slice(2)}`,
-    createdAt: Date.now(),
-    persona,
-  }
+  return res
+    .map((v) => {
+      if (!v || typeof v !== 'object') return null
+      const obj = v as { ai_num?: unknown; title?: unknown }
+      if (obj.ai_num === undefined || obj.title === undefined) return null
+      return { ai_num: String(obj.ai_num), title: String(obj.title) }
+    })
+    .filter((v): v is HistoryEntry => Boolean(v))
 }
