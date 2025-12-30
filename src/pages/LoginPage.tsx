@@ -49,9 +49,10 @@ export default function LoginPage() {
       .then((res) => {
         const username = res.username ?? email.split('@')[0]
         const token = res.token
+        const userNum = res.user_num
         completeAuthAndGo(email, username)
         if (token) {
-          setAuthed({ email, username }, token)
+          setAuthed({ email, username }, token, userNum)
         }
       })
       .catch((e) => {
@@ -88,7 +89,8 @@ export default function LoginPage() {
     })
       .then((res) => {
         const token = res.token
-        if (token) setAuthed({ email, username }, token)
+        const userNum = res.user_num
+        if (token) setAuthed({ email, username }, token, userNum)
         completeAuthAndGo(email, username)
       })
       .catch((e) => {

@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage'
 import PlannerPage from './pages/PlannerPage'
 import FollowupQuestionPage from './pages/FollowupQuestionPage'
 import ResultPage from './pages/ResultPage'
+import FavoritesPage from './pages/FavoritesPage'
 import { isAuthed } from './storage/authStorage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -40,6 +41,14 @@ export default function App() {
         element={
           <RequireAuth>
             <ResultPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/favorites"
+        element={
+          <RequireAuth>
+            <FavoritesPage />
           </RequireAuth>
         }
       />

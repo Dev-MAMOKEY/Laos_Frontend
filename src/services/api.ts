@@ -1,6 +1,6 @@
 import axios, { AxiosHeaders, type AxiosInstance, type AxiosRequestHeaders } from 'axios'
 import type { Persona } from '../types/persona'
-import { getAuthToken, getAuthUsername, getAuthEmail } from '../storage/authStorage'
+import { getAuthToken, getAuthUsername, getAuthEmail, getAuthUserNum } from '../storage/authStorage'
 
 export type AuthResponse = {
   status?: number
@@ -8,6 +8,7 @@ export type AuthResponse = {
   token?: string
   email?: string
   username?: string
+  user_num?: string | number
 }
 
 export type BookmarkItem = {
@@ -49,7 +50,9 @@ function ensureApiBase(): string {
 }
 
 function resolveUserIdPathParam(): string {
-  // 우선 username, 없으면 email, 모두 없으면 'me'
+  // 우선 user_num, 없으면 username, 그다음 email, 모두 없으면 'me'
+  const userNum = getAuthUserNum()
+  if (userNum && userNum.trim()) return encodeURIComponent(userNum.trim())
   const username = getAuthUsername()
   if (username && username.trim()) return encodeURIComponent(username.trim())
   const email = getAuthEmail()
@@ -219,7 +222,8 @@ export async function removeFavorite(like_num: string): Promise<void> {
 }
 
 export async function fetchHistory(): Promise<HistoryEntry[]> {
-  const res = await apiRequest<unknown>('/view/history', { method: 'GET' })
+  const userId = resolveUserIdPathParam()
+  const res = await apiRequest<unknown>(`/view/history/${userId}`, { method: 'GET' })
   if (!Array.isArray(res)) return []
 
   return res
