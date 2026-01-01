@@ -34,8 +34,8 @@ export default function AuthCallbackPage() {
     if (immediateError) return
     if (!isProvider(providerRaw)) return
 
-    const finish = (profile: { email: string; username?: string }, t?: string) => {
-      setAuthed(profile, t)
+    const finish = (profile: { email: string; username?: string }, accessToken?: string, refreshToken?: string) => {
+      setAuthed({ email: profile.email }, accessToken, undefined, refreshToken)
       navigate('/planner', { replace: true })
     }
 

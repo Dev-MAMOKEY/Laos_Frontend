@@ -4,6 +4,13 @@ export type Destination = {
   description: string
 }
 
+export type Recommendation = {
+  id: string
+  rank: string
+  title: string
+  reason: string
+}
+
 export type ItineraryItem = {
   id: string
   title: string
@@ -22,4 +29,5 @@ export type Persona = {
   description: string
   destinations: Destination[]
   itinerary: ItineraryDay[]
+  recommendations?: Recommendation[]
 }

@@ -4,7 +4,8 @@ import { QUESTIONS } from '../questions'
 import PageShell from '../components/layout/PageShell'
 import ProgressBar from '../components/ui/ProgressBar'
 import Spinner from '../components/ui/Spinner'
-import { setAnswers } from '../storage/personaStorage'
+import { analyzePersonaAsync } from '../services/personaService'
+import { setAnswers, setPersona } from '../storage/personaStorage'
 
 type Message = {
   id: string
@@ -73,9 +74,20 @@ export default function PlannerPage() {
     setAnswersState((prev) => {
       const next = [...prev, optionIndex]
       if (next.length === totalSteps) {
-        setAnswers(next)
         setIsLoading(true)
-        navigate('/planner/question', { replace: true })
+        void (async () => {
+          try {
+            // MBTI 답변을 미리 전송해 결과를 받아두고, 후속 프롬프트 단계로 이동
+            const persona = await analyzePersonaAsync(next)
+            setPersona(persona)
+          } catch (err) {
+            // 실패해도 프롬프트 단계로 진행해 추가 요청을 받아볼 수 있게 유지
+            console.error(err)
+          } finally {
+            setAnswers(next)
+            navigate('/planner/question', { replace: true })
+          }
+        })()
       }
       return next
     })

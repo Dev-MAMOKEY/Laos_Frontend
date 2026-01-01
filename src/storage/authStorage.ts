@@ -2,29 +2,36 @@ import { STORAGE_KEYS } from './keys'
 
 export type AuthProfile = {
   email: string
-  username?: string
 }
 
 export function isAuthed(): boolean {
-  return sessionStorage.getItem(STORAGE_KEYS.auth) === '1'
+  return Boolean(getAuthToken())
 }
 
-export function setAuthed(profile: AuthProfile, token?: string, userNum?: string | number) {
-  sessionStorage.setItem(STORAGE_KEYS.auth, '1')
+export function setAuthed(
+  profile: AuthProfile,
+  accessToken?: string,
+  userNum?: string | number,
+  refreshToken?: string,
+) {
   sessionStorage.setItem(STORAGE_KEYS.email, profile.email.trim())
-  if (profile.username) sessionStorage.setItem(STORAGE_KEYS.username, profile.username.trim())
-  if (token) sessionStorage.setItem(STORAGE_KEYS.token, token)
+  if (accessToken) {
+    sessionStorage.setItem(STORAGE_KEYS.access_token, accessToken)
+  }
+  if (refreshToken) {
+    sessionStorage.setItem(STORAGE_KEYS.refresh_token, refreshToken)
+  }
   if (userNum !== undefined && userNum !== null) {
     sessionStorage.setItem(STORAGE_KEYS.user_num, String(userNum))
   }
 }
 
 export function getAuthToken(): string | null {
-  return sessionStorage.getItem(STORAGE_KEYS.token)
+  return sessionStorage.getItem(STORAGE_KEYS.access_token)
 }
 
-export function getAuthUsername(): string | null {
-  return sessionStorage.getItem(STORAGE_KEYS.username)
+export function getRefreshToken(): string | null {
+  return sessionStorage.getItem(STORAGE_KEYS.refresh_token)
 }
 
 export function getAuthUserNum(): string | null {
@@ -36,9 +43,8 @@ export function getAuthEmail(): string | null {
 }
 
 export function clearAuth() { //로그아웃
-  sessionStorage.removeItem(STORAGE_KEYS.auth)
   sessionStorage.removeItem(STORAGE_KEYS.email)
-  sessionStorage.removeItem(STORAGE_KEYS.username)
   sessionStorage.removeItem(STORAGE_KEYS.user_num)
-  sessionStorage.removeItem(STORAGE_KEYS.token)
+  sessionStorage.removeItem(STORAGE_KEYS.access_token)
+  sessionStorage.removeItem(STORAGE_KEYS.refresh_token)
 }

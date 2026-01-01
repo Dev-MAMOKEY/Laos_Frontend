@@ -27,8 +27,15 @@ export default function LoginPage() {
   // const [isSendingCode, setIsSendingCode] = useState(false) // 이메일 인증 코드 발송 상태
   // const [codeMessage, setCodeMessage] = useState<string | null>(null) // 인증 코드 발송 메시지 상태
 
-  const completeAuthAndGo = (email: string, username?: string) => {
-    setAuthed({ email, username })
+  const completeAuthAndGo = (
+    email: string,
+    username?: string,
+    accessToken?: string,
+    userNum?: string | number,
+    refreshToken?: string,
+  ) => {
+    // Persist auth info (and token if provided) before leaving the page
+    setAuthed({ email }, accessToken, userNum, refreshToken)
     navigate('/planner', { replace: true })
   }
 
@@ -36,32 +43,27 @@ export default function LoginPage() {
     navigate(`/auth/${provider}`)
   }
 
-  const onSubmitLogin = (e: FormEvent) => {
+  const onSubmitLogin = async (e: FormEvent) => {
     e.preventDefault()
     setFormError(null)
 
-    const email = loginEmail.trim()
+    const email = loginEmail.trim() // localId 역할(회원가입 때 입력한 아이디/이메일)
     const password = loginPassword
 
-    // 백엔드 로그인 호출 (서버 없으면 에러 메시지 표출)
     setIsSubmitting(true)
-    postLogin({ user_id: email, password })
-      .then((res) => {
-        const username = res.username ?? email.split('@')[0]
-        const token = res.token
-        const userNum = res.user_num
-        completeAuthAndGo(email, username)
-        if (token) {
-          setAuthed({ email, username }, token, userNum)
-        }
-      })
-      .catch((e) => {
-        setFormError(e instanceof Error ? e.message : '로그인에 실패했습니다.')
-      })
-      .finally(() => setIsSubmitting(false))
+    try {
+      const res = await postLogin({ localId: email, password })
+      const username = res.username ?? email.split('@')[0]
+      const accessToken = res.accessToken ?? res.token
+      completeAuthAndGo(email, username, accessToken, res.user_num, res.refreshToken)
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : '로그인에 실패했습니다.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const onSubmitSignup = (e: FormEvent) => {
+  const onSubmitSignup = async (e: FormEvent) => {
     e.preventDefault()
     setFormError(null)
 
@@ -78,25 +80,31 @@ export default function LoginPage() {
       return
     }
 
-    // 백엔드 회원가입 호출 (서버 없으면 에러 메시지 표출)
     setIsSubmitting(true)
-    postRegister({
-      user_id: username,
-      username,
-      password: signupPassword,
-      email,
-      // 'email-code': signupEmailCode.trim(),
-    })
-      .then((res) => {
-        const token = res.token
-        const userNum = res.user_num
-        if (token) setAuthed({ email, username }, token, userNum)
-        completeAuthAndGo(email, username)
+    try {
+      const registerRes = await postRegister({
+        localId: username,
+        nickname: username,
+        password: signupPassword,
+        email,
+        // 'email-code': signupEmailCode.trim(),
       })
-      .catch((e) => {
-        setFormError(e instanceof Error ? e.message : '회원가입에 실패했습니다.')
-      })
-      .finally(() => setIsSubmitting(false))
+
+      // 일부 백엔드는 회원가입 응답에 토큰을 주지 않으므로, 없으면 바로 로그인 시도
+      const regAccessToken = registerRes.accessToken ?? registerRes.token
+      if (regAccessToken) {
+        completeAuthAndGo(email, username, regAccessToken, registerRes.user_num, registerRes.refreshToken)
+      } else {
+        const loginRes = await postLogin({ localId: username, password: signupPassword })
+        const finalUsername = loginRes.username ?? username
+        const accessToken = loginRes.accessToken ?? loginRes.token
+        completeAuthAndGo(email, finalUsername, accessToken, loginRes.user_num, loginRes.refreshToken)
+      }
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : '회원가입에 실패했습니다.')
+    } finally {
+      setIsSubmitting(false)
+    }
 
   }
 
@@ -129,16 +137,16 @@ export default function LoginPage() {
             <form className="space-y-4" onSubmit={onSubmitLogin}>
                 <div>
                   <label className="text-sm font-medium text-slate-700" htmlFor="loginEmail">
-                    이메일
+                    아이디
                   </label>
                   <input
                     id="loginEmail"
-                    type="email"
+                    type="text"
                     required
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                     className="mt-2 w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-blue-500"
-                    placeholder="you@example.com"
+                    placeholder="your_id"
                   />
                 </div>
 

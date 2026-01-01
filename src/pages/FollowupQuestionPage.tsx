@@ -4,9 +4,141 @@ import { useNavigate } from 'react-router-dom'
 import PageShell from '../components/layout/PageShell'
 import Card from '../components/ui/Card'
 import Spinner from '../components/ui/Spinner'
-import { analyzePersonaAsync } from '../services/personaService'
 import { postQuestion } from '../services/api'
 import { getAnswers, setPersona } from '../storage/personaStorage'
+import type { Persona } from '../types/persona'
+
+function tryParseJson(raw: string): unknown | null {
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+function parseContentString(raw: string): Persona | null {
+  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  const recommendations: { id: string; rank: string; title: string; reason: string }[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const match = line.match(/^(\d+)\.[\s]*([^]+)$/)
+    if (match) {
+      const rank = match[1]
+      const title = match[2].trim()
+      const next = lines[i + 1] ?? ''
+      const reasonMatch = next.match(/^추천이유\s*:\s*(.*)$/)
+      const reason = reasonMatch ? reasonMatch[1].trim() : ''
+      recommendations.push({
+        id: `${rank}-${title}`.replace(/\s+/g, '-'),
+        rank,
+        title,
+        reason,
+      })
+    }
+  }
+
+  if (!recommendations.length) return null
+
+  return {
+    keyword: '추천 결과',
+    tags: [],
+    description: '아래 추천 여행지를 확인하세요.',
+    destinations: [],
+    itinerary: [],
+    recommendations,
+  }
+}
+
+function normalizeQuestionResponse(data: unknown): Persona {
+  // 1) 기존 페르소나 구조 그대로 들어오는 경우
+  if (data && typeof data === 'object' && 'keyword' in data) {
+    return data as Persona
+  }
+
+  // 1-2) { content: "..." } 래핑된 문자열
+  if (data && typeof data === 'object' && 'content' in data) {
+    const content = (data as { content?: unknown }).content
+    if (typeof content === 'string') {
+      // content 문자열이 JSON 일 수도 있으므로 먼저 파싱 시도
+      const embedded = tryParseJson(content)
+      if (embedded) {
+        try {
+          return normalizeQuestionResponse(embedded)
+        } catch {
+          // fallback below
+        }
+      }
+      const parsed = parseContentString(content)
+      if (parsed) return parsed
+    }
+  }
+
+  // 2) 새로운 추천 맵 형태: { "1. 제주도 - ...": { "추천이유": "..." }, ... }
+  if (data && typeof data === 'object') {
+    const entries = Object.entries(
+      data as Record<string, { 추천이유?: string; recommend_reason?: string; travel_destination?: string; 여행지?: string } | string>
+    )
+
+    const recommendations = entries.map(([key, value], idx) => {
+      const [rankPart, ...rest] = key.split('.')
+      const rank = rankPart.trim() || String(idx + 1)
+      const titleFromKey = rest.join('.').trim()
+
+      const isObject = value && typeof value === 'object'
+      const destination = isObject
+        ? String(
+            (value as { travel_destination?: unknown; 여행지?: unknown }).travel_destination ??
+            (value as { travel_destination?: unknown; 여행지?: unknown }).여행지 ??
+            ''
+          ).trim()
+        : typeof value === 'string'
+          ? value.trim()
+          : ''
+
+      const reasonCandidate = isObject
+        ? (value as { recommend_reason?: unknown; 추천이유?: unknown }).recommend_reason ??
+          (value as { recommend_reason?: unknown; 추천이유?: unknown }).추천이유
+        : undefined
+
+      const title = titleFromKey || destination || key.trim() || `추천 ${idx + 1}`
+      const reason = reasonCandidate ? String(reasonCandidate) : ''
+
+      return {
+        id: `${rank || idx + 1}-${title}`.replace(/\s+/g, '-'),
+        rank,
+        title,
+        reason,
+      }
+    })
+
+    return {
+      keyword: '추천 결과',
+      tags: [],
+      description: '아래 추천 여행지를 확인하세요.',
+      destinations: [],
+      itinerary: [],
+      recommendations,
+    }
+  }
+
+  // 3) content 문자열 안에 목록이 들어있는 경우 (예: "1. 서울 - ...\n추천이유: ...")
+  if (typeof data === 'string') {
+    const embedded = tryParseJson(data)
+    if (embedded) {
+      try {
+        return normalizeQuestionResponse(embedded)
+      } catch {
+        // fallback below
+      }
+    }
+
+    const parsed = parseContentString(data)
+    if (parsed) return parsed
+  }
+
+  throw new Error('추천 결과를 해석할 수 없습니다.')
+}
 
 export default function FollowupQuestionPage() {
   const navigate = useNavigate()
@@ -30,22 +162,15 @@ export default function FollowupQuestionPage() {
       const content = value.trim()
 
       // 질문 등록 엔드포인트로 자연어 전달 (필수 토큰 자동 포함)
-      const persona = await postQuestion({ content, answers })
+      const response = await postQuestion({ content })
+      const persona = normalizeQuestionResponse(response)
 
       // 2) 성공 시 결과 저장 후 이동
       setPersona(persona)
       navigate('/result', { replace: true })
     } catch (e) {
-      // 실패하면 기존 MBTI 엔드포인트/로컬 로직으로 폴백
-      try {
-        const persona = await analyzePersonaAsync(answers, value.trim() || undefined)
-        setPersona(persona)
-        navigate('/result', { replace: true })
-        return
-      } catch (fallbackErr) {
-        const msg = fallbackErr instanceof Error ? fallbackErr.message : '추천 생성에 실패했습니다.'
-        setError(msg)
-      }
+      const msg = e instanceof Error ? e.message : '추천 생성에 실패했습니다.'
+      setError(msg)
     } finally {
       setLoading(false)
     }

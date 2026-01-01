@@ -16,6 +16,10 @@ export function setPersona(persona: Persona) {
   writeJson(sessionStorage, STORAGE_KEYS.persona, persona)
 }
 
+export function clearPersona() {
+  sessionStorage.removeItem(STORAGE_KEYS.persona)
+}
+
 export function setAnswers(answers: number[]) {
   writeJson(sessionStorage, STORAGE_KEYS.answers, answers)
 }
@@ -29,4 +33,8 @@ export function getAnswers(): number[] | null {
   } catch {
     return null
   }
+}
+
+export function clearAnswers() {
+  sessionStorage.removeItem(STORAGE_KEYS.answers)
 }

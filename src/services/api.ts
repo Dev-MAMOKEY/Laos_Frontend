@@ -1,11 +1,13 @@
 import axios, { AxiosHeaders, type AxiosInstance, type AxiosRequestHeaders } from 'axios'
 import type { Persona } from '../types/persona'
-import { getAuthToken, getAuthUsername, getAuthEmail, getAuthUserNum } from '../storage/authStorage'
+import { getAuthToken, getAuthEmail, getAuthUserNum } from '../storage/authStorage'
 
 export type AuthResponse = {
   status?: number
   message?: string
-  token?: string
+  token?: string // legacy
+  accessToken?: string
+  refreshToken?: string
   email?: string
   username?: string
   user_num?: string | number
@@ -28,6 +30,11 @@ export type OAuthTokenResponse = {
   token_type?: string
 }
 
+export type MbtiAnswer = {
+  questionId: number
+  answer: 0 | 1
+}
+
 type ApiInit = {
   method?: 'GET' | 'POST' | 'DELETE'
   body?: unknown
@@ -40,21 +47,26 @@ type ApiInit = {
 
 function normalizeBase(url: string | undefined): string | undefined {
   if (!url) return undefined
-  return url.replace(/\/$/, '')
+  const trimmed = url.trim()
+  if (!trimmed) return undefined
+  return trimmed.replace(/\/$/, '')
 }
 
 function ensureApiBase(): string {
-  const base = normalizeBase(import.meta.env.VITE_API_BASE_URL as string | undefined)
+  // dev에서는 기본적으로 프록시(/api)로 우선 보내고, 필요 시 VITE_API_BASE_URL_FORCE_REMOTE=true 로 원격 사용
+  const useRemote = String(import.meta.env.VITE_API_BASE_URL_FORCE_REMOTE ?? '').toLowerCase() === 'true'
+  const base = import.meta.env.DEV && !useRemote
+    ? '/api'
+    : normalizeBase(import.meta.env.VITE_API_BASE_URL as string | undefined)
+
   if (!base) throw new Error('VITE_API_BASE_URL이 설정되지 않았습니다.')
-  return base //API 기본 URL
+  return base
 }
 
 function resolveUserIdPathParam(): string {
   // 우선 user_num, 없으면 username, 그다음 email, 모두 없으면 'me'
   const userNum = getAuthUserNum()
   if (userNum && userNum.trim()) return encodeURIComponent(userNum.trim())
-  const username = getAuthUsername()
-  if (username && username.trim()) return encodeURIComponent(username.trim())
   const email = getAuthEmail()
   if (email && email.trim()) return encodeURIComponent(email.trim())
   return 'me'
@@ -105,10 +117,12 @@ async function apiRequest<T>(path: string, init: ApiInit = {}): Promise<T> {
   }
 }
 
-export async function postPersonaAnalysis(answers: number[], prompt?: string): Promise<Persona> {
-  const personaBase =
-    normalizeBase(import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-    normalizeBase(import.meta.env.VITE_PERSONA_API_URL as string | undefined)
+export async function postPersonaAnalysis(answers: MbtiAnswer[]): Promise<Persona> {
+  const useRemote = String(import.meta.env.VITE_API_BASE_URL_FORCE_REMOTE ?? '').toLowerCase() === 'true'
+  const personaBase = import.meta.env.DEV && !useRemote
+    ? '/api'
+    : normalizeBase(import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+      normalizeBase(import.meta.env.VITE_PERSONA_API_URL as string | undefined)
 
   if (!personaBase) {
     throw new Error('VITE_API_BASE_URL 또는 VITE_PERSONA_API_URL이 필요합니다.')
@@ -117,25 +131,25 @@ export async function postPersonaAnalysis(answers: number[], prompt?: string): P
   // MBTI 테스트 백엔드에 답변과 선택적 자연어 조건을 전송
   return apiRequest<Persona>('/mbti/test', {
     method: 'POST',
-    body: { answers, prompt },
+    body: { answers },
     // MBTI 테스트는 인증이 필요하므로 기본 토큰 전송
     skipAuth: false,
     baseOverride: personaBase,
   })
 }
 
-export async function postQuestion(payload: { content: string; answers?: number[] }): Promise<Persona> {
-  // 질문 등록 엔드포인트로 자연어 요청과(선택) 답변 배열을 보냄
-  return apiRequest<Persona>('/question', {
+export async function postQuestion(payload: { content: string }): Promise<unknown> {
+  // 질문 등록 엔드포인트로 자연어 요청을 보냄 (응답 포맷이 유동적이라 unknown 처리)
+  return apiRequest<unknown>('/question', {
     method: 'POST',
     body: payload,
   })
 }
 
 export async function postRegister(payload: {
-  user_id: string
+  localId: string
   password: string
-  username: string
+  nickname: string
   email: string
   // 'email-code': string
 }): Promise<AuthResponse> {
@@ -144,17 +158,17 @@ export async function postRegister(payload: {
 }
 
 export async function postLogin(payload: {
-    user_id: string; 
+    localId: string; 
     password: string 
 }): Promise<AuthResponse> {
-  // 로그인 요청을 
+  // 로컬(이메일/비번) 로그인 엔드포인트
   return apiRequest<AuthResponse>('/login', { method: 'POST', body: payload, skipAuth: true })
 }
 
-export async function postEmailCode(payload: { email: string }): Promise<AuthResponse> {
-  // 이메일 인증 코드 요청
-  return apiRequest<AuthResponse>('/auth/email/send', { method: 'POST', body: payload, skipAuth: true })
-}
+// export async function postEmailCode(payload: { email: string }): Promise<AuthResponse> {
+//   // 이메일 인증 코드 요청
+//   return apiRequest<AuthResponse>('/auth/email/send', { method: 'POST', body: payload, skipAuth: true })
+// }
 // export async function 
 
 export async function postFacebookOAuthCallback(code: string): Promise<OAuthTokenResponse> {
