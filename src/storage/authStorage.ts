@@ -1,5 +1,6 @@
 import { STORAGE_KEYS } from './keys'
 
+
 export type AuthProfile = {
   email: string
 }
@@ -37,6 +38,13 @@ export function getRefreshToken(): string | null {
 export function getAuthUserNum(): string | null {
   return sessionStorage.getItem(STORAGE_KEYS.user_num)
 }
+
+// export function getUserNumFromToken(): string | null {
+//   const token = getAuthToken()
+//   const decoded = token ? jwtDecode<{ userNum?: string }>(token) : null // JWT 디코딩
+//   return decoded?.userNum ?? null
+
+// }
 
 export function getAuthEmail(): string | null {
   return sessionStorage.getItem(STORAGE_KEYS.email)

@@ -1,6 +1,7 @@
 import axios, { AxiosHeaders, type AxiosInstance, type AxiosRequestHeaders } from 'axios'
 import type { Persona } from '../types/persona'
-import { getAuthToken, getAuthEmail, getAuthUserNum } from '../storage/authStorage'
+import { jwtDecode } from 'jwt-decode' //jwt 디코드 라이브러리
+import { getAuthToken } from '../storage/authStorage'
 
 export type AuthResponse = {
   status?: number
@@ -11,16 +12,6 @@ export type AuthResponse = {
   email?: string
   username?: string
   user_num?: string | number
-}
-
-export type BookmarkItem = {
-  ai_num: string
-  like_num: string
-}
-
-export type HistoryEntry = {
-  ai_num: string
-  title: string
 }
 
 export type OAuthTokenResponse = {
@@ -61,15 +52,6 @@ function ensureApiBase(): string {
 
   if (!base) throw new Error('VITE_API_BASE_URL이 설정되지 않았습니다.')
   return base
-}
-
-function resolveUserIdPathParam(): string {
-  // 우선 user_num, 없으면 username, 그다음 email, 모두 없으면 'me'
-  const userNum = getAuthUserNum()
-  if (userNum && userNum.trim()) return encodeURIComponent(userNum.trim())
-  const email = getAuthEmail()
-  if (email && email.trim()) return encodeURIComponent(email.trim())
-  return 'me'
 }
 
 function createClient(baseURL: string): AxiosInstance {
@@ -193,59 +175,8 @@ export async function postGoogleOAuthCallback(code: string): Promise<OAuthTokenR
   })
 }
 
-export async function fetchFavorites(): Promise<BookmarkItem[]> {
-  const userId = resolveUserIdPathParam()
-  const res = await apiRequest<unknown>(`/bookmark-list/${userId}`, { method: 'GET' })
-
-  if (!res || typeof res !== 'object') return []
-  const arr = Array.isArray((res as { favorites?: unknown[] }).favorites)
-    ? ((res as { favorites?: unknown[] }).favorites as unknown[])
-    : Array.isArray((res as unknown[]))
-      ? (res as unknown[])
-      : []
-
-  return arr
-    .map((v) => {
-      if (!v || typeof v !== 'object') return null
-      const obj = v as { ai_num?: unknown; like_num?: unknown }
-      if (obj.ai_num === undefined || obj.like_num === undefined) return null
-      return { ai_num: String(obj.ai_num), like_num: String(obj.like_num) }
-    })
-    .filter((v): v is BookmarkItem => Boolean(v))
-}
-
-export async function addFavorite(ai_num: string, like_num: string): Promise<BookmarkItem> {
-  const userId = resolveUserIdPathParam()
-  const res = await apiRequest<unknown>(`/add/bookmark/${userId}`, {
-    method: 'POST',
-    body: { ai_num, like_num },
-  })
-
-  const obj = res as { ai_num?: unknown; like_num?: unknown }
-  return {
-    ai_num: String(obj?.ai_num ?? ai_num),
-    like_num: String(obj?.like_num ?? like_num),
-  }
-}
-
-export async function removeFavorite(like_num: string): Promise<void> {
-  const userId = resolveUserIdPathParam()
-  await apiRequest<unknown>(`/delete/bookmark/${userId}/${encodeURIComponent(like_num)}`, {
-    method: 'DELETE',
-  })
-}
-
-export async function fetchHistory(): Promise<HistoryEntry[]> {
-  const userId = resolveUserIdPathParam()
-  const res = await apiRequest<unknown>(`/view/history/${userId}`, { method: 'GET' })
-  if (!Array.isArray(res)) return []
-
-  return res
-    .map((v) => {
-      if (!v || typeof v !== 'object') return null
-      const obj = v as { ai_num?: unknown; title?: unknown }
-      if (obj.ai_num === undefined || obj.title === undefined) return null
-      return { ai_num: String(obj.ai_num), title: String(obj.title) }
-    })
-    .filter((v): v is HistoryEntry => Boolean(v))
+export async function logout(): Promise<void> {
+  const token = getAuthToken()
+  const decoded = token ? jwtDecode<{ userNum?: string }>(token) : null // JWT 디코딩
+  await apiRequest<void>(`/logout/${decoded?.userNum}`, { method: 'POST' })
 }

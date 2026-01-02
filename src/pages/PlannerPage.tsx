@@ -5,7 +5,7 @@ import PageShell from '../components/layout/PageShell'
 import ProgressBar from '../components/ui/ProgressBar'
 import Spinner from '../components/ui/Spinner'
 import { analyzePersonaAsync } from '../services/personaService'
-import { setAnswers, setPersona } from '../storage/personaStorage'
+import { clearAnswers, clearPersona, clearMbtiPersona, setAnswers, setMbtiPersona, setPersona } from '../storage/personaStorage'
 
 type Message = {
   id: string
@@ -46,6 +46,13 @@ export default function PlannerPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [messages, isLoading])
 
+  useEffect(() => {
+    // 새 테스트 시작 시 이전 결과/답변 초기화
+    clearPersona()
+    clearMbtiPersona()
+    clearAnswers()
+  }, [])
+
   const currentQuestion = useMemo(() => {
     if (step >= totalSteps) return null
     return QUESTIONS[step]
@@ -79,6 +86,7 @@ export default function PlannerPage() {
           try {
             // MBTI 답변을 미리 전송해 결과를 받아두고, 후속 프롬프트 단계로 이동
             const persona = await analyzePersonaAsync(next)
+            setMbtiPersona(persona)
             setPersona(persona)
           } catch (err) {
             // 실패해도 프롬프트 단계로 진행해 추가 요청을 받아볼 수 있게 유지
